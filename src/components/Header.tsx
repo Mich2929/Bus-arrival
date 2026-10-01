@@ -11,6 +11,7 @@ interface HeaderProps {
   onOpenPinned?: () => void;
   currentStopName?: string;
   onOpenChangeStop?: () => void;
+  onOpenHealth?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPinned,
   currentStopName = 'Singapore Central',
   onOpenChangeStop,
+  onOpenHealth,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
@@ -31,10 +33,15 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="bg-[#500054] text-white py-1 px-4 md:px-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between text-[11px] font-semibold tracking-wide">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5 text-[#89f5e7]">
+            <button
+              onClick={onOpenHealth}
+              className="flex items-center gap-1.5 text-[#89f5e7] hover:underline cursor-pointer"
+              title="Click to check API Health & LTA DataMall Gateway Status"
+            >
               <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse"></span>
-              <span>LTA DataMall Synced</span>
-            </div>
+              <span>LTA DataMall v3 Synced</span>
+              <span className="text-[10px] bg-white/20 text-white px-1 rounded ml-0.5">Health</span>
+            </button>
             <button
               onClick={onOpenChangeStop}
               className="hidden sm:flex items-center gap-1.5 text-[#ffd6f8] hover:text-white transition-colors cursor-pointer"

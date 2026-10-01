@@ -2,6 +2,15 @@ import { BusStop, ServiceArrival, TransitAlert, ServiceDetail, MRTStation } from
 
 export const INITIAL_BUS_STOPS: BusStop[] = [
   {
+    code: '83139',
+    name: 'Opp Parkway Parade',
+    road: 'Marine Parade Rd',
+    distanceMeters: 450,
+    services: ['15', '31', '36', '43', '48', '135', '196', '197', '966'],
+    lat: 1.3015,
+    lng: 103.9042,
+  },
+  {
     code: '04168',
     name: 'Aft City Hall Stn Exit B',
     road: 'North Bridge Rd',
@@ -9,6 +18,15 @@ export const INITIAL_BUS_STOPS: BusStop[] = [
     services: ['147', '124', '166', '174', '190', '851', '61', '32'],
     lat: 1.2934,
     lng: 103.8521,
+  },
+  {
+    code: '20251',
+    name: 'Aft Jln Jurong Kechil',
+    road: 'Jln Anak Bukit',
+    distanceMeters: 1200,
+    services: ['176', '30', '78', '67', '75', '170', '184', '852', '961'],
+    lat: 1.3412,
+    lng: 103.7754,
   },
   {
     code: '04142',

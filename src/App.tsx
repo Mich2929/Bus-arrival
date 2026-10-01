@@ -8,12 +8,14 @@ import { SearchRail } from './components/SearchRail';
 import { TimetableModal } from './components/TimetableModal';
 import { ChangeStopModal } from './components/ChangeStopModal';
 import { AccessibilityModal } from './components/AccessibilityModal';
+import { ApiHealthModal } from './components/ApiHealthModal';
 import { RoutesView } from './components/RoutesView';
 import { MrtNetworkView } from './components/MrtNetworkView';
 import { AlertsView } from './components/AlertsView';
 import { Footer } from './components/Footer';
-import { INITIAL_BUS_STOPS, INITIAL_SERVICES, TRANSIT_ALERTS } from './data/transitData';
+import { INITIAL_BUS_STOPS, INITIAL_SERVICES, TRANSIT_ALERTS, SERVICE_DETAILS_MAP } from './data/transitData';
 import { BusStop, ServiceArrival, ServiceCategory } from './types/transit';
+import { fetchLtaBusArrival, parseLtaArrival } from './services/ltaService';
 
 export default function App() {
   const [activeTab, setActiveTab] = React.useState<NavTab>('nextbus-arrival');
@@ -22,7 +24,15 @@ export default function App() {
   // Bus stop state
   const [busStops] = React.useState<BusStop[]>(INITIAL_BUS_STOPS);
   const [currentStopCode, setCurrentStopCode] = React.useState<string>('04168');
-  const currentStop = busStops.find((s) => s.code === currentStopCode) || busStops[0];
+  const currentStop = busStops.find((s) => s.code === currentStopCode) || {
+    code: currentStopCode,
+    name: `Bus Stop ${currentStopCode}`,
+    road: 'Singapore Transit Network',
+    distanceMeters: 120,
+    services: [],
+    lat: 1.2934,
+    lng: 103.8521,
+  };
 
   // Selected Service and Category
   const [services, setServices] = React.useState<ServiceArrival[]>(INITIAL_SERVICES);
@@ -36,18 +46,71 @@ export default function App() {
   const [timetableServiceNo, setTimetableServiceNo] = React.useState<string | null>(null);
   const [isChangeStopOpen, setIsChangeStopOpen] = React.useState<boolean>(false);
   const [isAccessibilityOpen, setIsAccessibilityOpen] = React.useState<boolean>(false);
+  const [isHealthOpen, setIsHealthOpen] = React.useState<boolean>(false);
 
-  // Auto-refresh timer
-  const [countdown, setCountdown] = React.useState<number>(18);
+  // LTA Telematics Metadata
+  const [ltaMeta, setLtaMeta] = React.useState<{ source?: string; warning?: string }>({
+    source: 'LTA DataMall v3 Endpoint (/apt/bus-arrival)',
+  });
+
+  // Auto-refresh timer (20-second LTA refresh cadence)
+  const [countdown, setCountdown] = React.useState<number>(20);
   const [isRefreshing, setIsRefreshing] = React.useState<boolean>(false);
   const [gpsStatus, setGpsStatus] = React.useState<'idle' | 'locating' | 'located'>('idle');
 
-  // Live countdown ticker effect
+  // Telematics fetch function from /apt/bus-arrival
+  const loadTelematicsData = React.useCallback(async (stopCode: string, targetService?: string) => {
+    setIsRefreshing(true);
+    try {
+      const data = await fetchLtaBusArrival(stopCode, targetService);
+      if (data._meta) {
+        setLtaMeta({
+          source: data._meta.source,
+          warning: data._meta.warning || data._meta.message,
+        });
+      }
+
+      if (data.Services && data.Services.length > 0) {
+        const mappedServices: ServiceArrival[] = data.Services.map((raw) => {
+          const detail = SERVICE_DETAILS_MAP[raw.ServiceNo];
+          return {
+            serviceNo: raw.ServiceNo,
+            category: detail?.category || 'Trunk',
+            destination: detail?.destination || `Terminal via Berth ${raw.NextBus?.DestinationCode || 'Loop'}`,
+            via: detail ? detail.stops.slice(1, 4).map((s) => s.name).join(', ') : 'Central, City Hall, Orchard',
+            fleetPlate: raw.NextBus?.Type === 'DD' ? 'SBS3829P' : 'SBS6819R',
+            fleetModel: raw.NextBus?.Type === 'DD' ? 'Volvo B9TL (Double Decker)' : 'Single Decker WAB',
+            nextBus: parseLtaArrival(raw.NextBus),
+            secondBus: parseLtaArrival(raw.NextBus2),
+            thirdBus: parseLtaArrival(raw.NextBus3),
+          };
+        });
+
+        setServices(mappedServices);
+
+        // Ensure selected service exists in list or pick first
+        if (!mappedServices.some((s) => s.serviceNo === selectedServiceNo)) {
+          setSelectedServiceNo(mappedServices[0].serviceNo);
+        }
+      }
+    } catch (err) {
+      console.warn('Using local fallback simulation as LTA network call failed:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [selectedServiceNo]);
+
+  // Load when stop code changes
+  React.useEffect(() => {
+    loadTelematicsData(currentStopCode);
+  }, [currentStopCode, loadTelematicsData]);
+
+  // Live countdown ticker effect (20 seconds)
   React.useEffect(() => {
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
-          triggerDataRefresh();
+          loadTelematicsData(currentStopCode);
           return 20;
         }
         return prev - 1;
@@ -55,31 +118,11 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
-
-  // Simulate telematics data refresh
-  const triggerDataRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      // Apply subtle variation in minutes to simulate live vehicles advancing
-      setServices((prev) =>
-        prev.map((s) => {
-          if (s.nextBus.etaMinutes === 1) {
-            return {
-              ...s,
-              nextBus: { ...s.nextBus, etaMinutes: 'Arr', estimatedTimeStr: 'Arriving at stop' },
-            };
-          }
-          return s;
-        })
-      );
-      setIsRefreshing(false);
-    }, 700);
-  };
+  }, [currentStopCode, loadTelematicsData]);
 
   const handleManualRefresh = () => {
     setCountdown(20);
-    triggerDataRefresh();
+    loadTelematicsData(currentStopCode, selectedServiceNo);
   };
 
   const handleTogglePin = (serviceNo: string) => {
@@ -132,6 +175,7 @@ export default function App() {
         }}
         currentStopName={`${currentStop.name} (${currentStop.code})`}
         onOpenChangeStop={() => setIsChangeStopOpen(true)}
+        onOpenHealth={() => setIsHealthOpen(true)}
       />
 
       {/* Main Content Viewport */}
@@ -158,8 +202,27 @@ export default function App() {
                     </p>
                   </div>
 
-                  {/* Fleet Pulse live counter badge */}
+                  {/* Fleet Pulse live counter badge & API Gateway Monitor */}
                   <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsHealthOpen(true)}
+                      className="bg-white px-3.5 py-2 rounded-xl shadow-xs border border-[#d8e3fb] hover:border-[#500054] transition-colors flex items-center gap-2.5 cursor-pointer text-left"
+                      title="Click to check API Gateway & LTA DataMall Endpoint Health"
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-[#500054]">
+                        hub
+                      </span>
+                      <div>
+                        <span className="block text-[10px] font-bold text-[#50434d] uppercase tracking-wider">
+                          LTA Endpoint
+                        </span>
+                        <span className="text-[12px] font-extrabold text-[#500054] truncate max-w-[130px] block font-mono">
+                          /apt/bus-arrival
+                        </span>
+                      </div>
+                    </button>
+
                     <div className="bg-white px-4 py-2.5 rounded-xl shadow-xs border border-[#d8e3fb] flex items-center gap-3">
                       <div className="w-2.5 h-2.5 rounded-full bg-[#16A34A] animate-ping"></div>
                       <div className="text-left">
@@ -386,6 +449,12 @@ export default function App() {
       <AccessibilityModal
         isOpen={isAccessibilityOpen}
         onClose={() => setIsAccessibilityOpen(false)}
+      />
+
+      {/* API Gateway & LTA DataMall Health Modal */}
+      <ApiHealthModal
+        isOpen={isHealthOpen}
+        onClose={() => setIsHealthOpen(false)}
       />
     </div>
   );
