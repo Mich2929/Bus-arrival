@@ -1,0 +1,6 @@
+{
+  "name": "SBS Transit NextBus Live",
+  "description": "Live Land Transport Authority (LTA) telematics feed and arrival timings for SBS Transit commuters across Singapore.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
